@@ -294,3 +294,169 @@ PR 단계에서는 빠른 피드백이 중요하므로 전체 E2E는 실행하�
 CI/CD에서는 빠른 API 테스트를 Pull Request 단계에서 실행하고, 통합 환경 배포 후 UI와 핵심 E2E를 실행한다. 전체 회귀는 정기 실행으로 분리해 개발 피드백 속도와 검증 범위의 균형을 맞춘다.
 
 Flaky 테스트는 재시도로 숨기지 않고 증거 수집, 원인 분류, 제한적 재시도, 격리, 담당자 지정, 수정 후 안정성 확인 절차로 관리한다. 이를 통해 짧은 기간에도 핵심 주문 상태에 대한 신뢰도 높은 자동화 기반을 먼저 확보하고, 오픈 이후 실제 결함과 변경 이력을 기준으로 범위를 지속적으로 확장한다.
+
+---
+
+## 문제 2. B마트 재고 API 테스트 자동화
+
+### 구현 범위
+
+실제 서버 없이도 과제를 실행할 수 있도록 Python 표준 라이브러리의 `ThreadingHTTPServer`를 이용해 메모리 기반 Stub API를 구현했다.
+
+| Method | Endpoint | 설명 |
+| --- | --- | --- |
+| `GET` | `/v1/products/{productId}/stock` | 현재 재고와 품절 여부 조회 |
+| `POST` | `/v1/orders` | 결제 완료 주문 생성 및 재고 차감 |
+| `POST` | `/v1/orders/{orderId}/cancel` | 주문 취소 및 재고 복구 |
+
+주문 생성 요청 형식은 다음과 같이 정의했다.
+
+```json
+{
+  "productId": "milk-1l",
+  "quantity": 1
+}
+```
+
+정상 주문은 `201 Created`, 재고 부족은 `409 Conflict`와 `OUT_OF_STOCK` 오류 코드를 반환한다. 존재하지 않는 상품·주문은 `404 Not Found`, 잘못된 수량은 `400 Bad Request`로 처리한다.
+
+### 실행 방법
+
+#### 사전 조건
+
+- Python 3.11 이상
+- 인터넷 연결은 최초 의존성 설치 시에만 필요
+
+#### 설치
+
+Windows PowerShell 기준:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+```
+
+macOS 또는 Linux 기준:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+```
+
+#### 전체 테스트 실행
+
+```bash
+python -m pytest -v
+```
+
+동시성 테스트만 실행하려면 다음 명령을 사용한다.
+
+```bash
+python -m pytest -v -k near_simultaneous
+```
+
+#### Stub 서버 단독 실행
+
+```bash
+python -m bmart_stock.server --port 8080 --product-id popular-product --stock 10
+```
+
+실행 후 별도 터미널에서 다음과 같이 호출할 수 있다.
+
+```bash
+curl http://127.0.0.1:8080/v1/products/popular-product/stock
+
+curl -X POST http://127.0.0.1:8080/v1/orders \
+  -H "Content-Type: application/json" \
+  -d '{"productId":"popular-product","quantity":1}'
+```
+
+### 테스트 케이스
+
+총 14개의 API 자동화 테스트를 구현했다.
+
+1. 현재 재고 정상 조회
+2. 존재하지 않는 상품 조회 실패
+3. 반복 재고 조회 시 재고 미차감
+4. 결제 완료 후 재고 1개 차감
+5. 복수 수량 주문 후 재고 차감
+6. 재고 부족 주문 거절 및 재고 보존
+7. 수량 0 주문 유효성 검증
+8. 존재하지 않는 상품 주문 실패
+9. 주문 취소 후 차감 수량 복구
+10. 존재하지 않는 주문 취소 실패
+11. 중복 취소 방지 및 이중 복구 차단
+12. 마지막 재고 주문 후 품절 전환
+13. 품절 주문 취소 후 구매 가능 상태 복원
+14. 마지막 재고 1개에 대한 동시 주문 시 1건 성공·1건 품절
+
+### 동시성 테스트 설계
+
+동시성 테스트는 재고가 1개인 상품을 준비하고 `ThreadPoolExecutor`의 작업 스레드 2개에서 주문을 전송한다. `Barrier`를 사용해 두 요청의 출발 시점을 맞춰 수십 ms 이내에 서버에 도달하도록 한다.
+
+서버의 주문 처리에서는 다음 과정 전체를 하나의 `RLock` 임계 구역으로 묶었다.
+
+1. 현재 재고 조회
+2. 주문 수량과 재고 비교
+3. 재고 차감
+4. 주문 저장
+
+따라서 두 요청이 동시에 처리되어도 첫 번째 요청만 재고를 1에서 0으로 변경할 수 있다. 테스트는 응답 코드가 정확히 `201` 1건과 `409` 1건인지, 실패 응답이 `OUT_OF_STOCK`인지, 최종 재고가 0이고 품절 상태인지 함께 검증한다. 단순히 스레드 실행이 끝났는지만 확인하지 않고 API 응답과 최종 상태를 모두 검증해 초과 판매 여부를 판단한다.
+
+### 설계 의도
+
+#### 실행 가능한 최소 Stub
+
+과제의 초점은 웹 프레임워크 사용법보다 재고 규칙과 테스트 품질에 있다고 판단했다. 따라서 서버 구현은 Python 표준 라이브러리만 사용하고, 테스트 도구에 `pytest`와 `requests`만 추가했다. 별도 데이터베이스나 외부 서비스 없이 어느 환경에서도 빠르게 실행할 수 있다.
+
+#### 도메인 로직과 HTTP 계층 분리
+
+`InventoryStore`는 재고·주문 규칙과 동시성 제어를 담당하고, `StockApiHandler`는 URL·JSON·HTTP 상태 코드 변환만 담당한다. 이 구조는 도메인 정책을 HTTP 세부 구현과 분리해 규칙 변경 시 영향 범위를 줄인다.
+
+#### 데이터 정합성 우선
+
+재고 확인과 차감을 하나의 잠금 구간에서 수행해 Check-Then-Act Race Condition을 방지한다. 취소도 주문 상태 확인, 재고 복구, 주문 상태 변경을 원자적으로 수행한다. 이미 취소된 주문은 `409 ALREADY_CANCELLED`로 거절해 재고가 두 번 복구되는 문제를 막는다.
+
+#### 명시적인 API 오류
+
+실패 응답은 HTTP 상태 코드뿐 아니라 `PRODUCT_NOT_FOUND`, `OUT_OF_STOCK`, `ALREADY_CANCELLED`처럼 기계적으로 판별 가능한 오류 코드를 포함한다. 테스트가 자연어 메시지에 의존하지 않으므로 문구 변경에 덜 취약하다.
+
+### 테스트 코드 구조
+
+```text
+.
+├── bmart_stock/
+│   ├── __init__.py
+│   └── server.py
+├── tests/
+│   ├── conftest.py
+│   ├── helpers.py
+│   └── test_stock_api.py
+├── pytest.ini
+└── requirements.txt
+```
+
+- `bmart_stock/server.py`: 재고·주문 도메인 로직과 HTTP Stub 서버
+- `tests/conftest.py`: 테스트별 독립 Store, 임의 포트 서버의 시작·종료, API Client fixture
+- `tests/helpers.py`: HTTP 호출을 캡슐화한 Client와 재사용 가능한 재고·오류 검증 헬퍼
+- `tests/test_stock_api.py`: 정상·예외·복구·품절·동시성 시나리오
+- `pytest.ini`: 테스트 탐색 위치와 기본 출력 설정
+
+각 테스트는 새로운 `InventoryStore`와 서버를 사용한다. 테스트 데이터가 다른 테스트에 남지 않으며 실행 순서와 병렬 실행 여부에 의존하지 않는다. 서버는 운영체제가 할당한 임의 포트에서 시작해 CI의 포트 충돌 가능성을 줄이고, fixture 종료 시 반드시 정리한다. 모든 HTTP 요청에는 2초 제한 시간을 적용해 서버 이상 시 테스트가 무한 대기하지 않도록 했다.
+
+### 사용한 도구
+
+#### Codex
+
+OpenAI Codex를 다음 작업에 활용했다.
+
+- 과제 PDF에서 문제 2 요구사항과 제출 조건 확인
+- API 명세의 합리적 가정과 예외 응답 설계
+- Python Stub 서버, fixture, 검증 헬퍼 및 테스트 코드 초안 작성
+- 동시성 Race Condition 재현 방식과 원자적 재고 차감 구조 검토
+- README 실행 방법과 설계 의도 문서화
+- 전체 테스트 실행, 변경 차이 및 관련 파일 범위 검증
+
+생성된 코드는 과제의 재고 처리 규칙과 테스트 목적에 맞는지 검토했으며, 최종 판단과 제출 책임은 작성자에게 있다.
