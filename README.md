@@ -553,36 +553,13 @@ problem3/e2e/src/androidTest/java/com/baemin/qa/
 
 ### 실행 방법
 
-이 코드는 실제 Android 앱과 Gradle 프로젝트가 없는 과제 환경을 고려해 완성된 `androidTest` 코드 형태로 제공한다. 실제 프로젝트에서는 `problem3/e2e/src/androidTest` 아래 파일을 앱 모듈의 `src/androidTest`로 옮기고 다음 의존성을 사용한다.
-
-```kotlin
-androidTestImplementation("androidx.test.ext:junit:<project-version>")
-androidTestImplementation("androidx.test:runner:<project-version>")
-androidTestImplementation("androidx.test.uiautomator:uiautomator:<project-version>")
-```
-
-연결된 에뮬레이터 또는 테스트 기기에서 다음과 같이 실행한다.
+본 코드는 실제 앱이 제공되지 않은 과제 환경을 고려해 완성된 `androidTest` 형태로 작성했다. 실제 프로젝트에서는 파일을 앱 모듈의 `src/androidTest`에 배치하고 UIAutomator 의존성을 추가한 뒤 실행한다.
 
 ```bash
 ./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.baemin.qa.OrderFlowTest
 ```
 
-Windows에서는 `gradlew.bat`을 사용한다.
-
-```powershell
-.\gradlew.bat connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.baemin.qa.OrderFlowTest
-```
-
-실행 전 CI fixture가 다음 조건을 보장해야 한다.
-
-- 테스트 계정 로그인 완료
-- "치킨 테스트 매장"이 영업 중이며 주문 가능
-- "후라이드" 메뉴의 재고와 결제 수단 준비
-- 이전 장바구니 및 팝업 제거
-- 테스트 주문을 식별·취소할 수 있는 독립 데이터 제공
-- 기기 애니메이션, 로케일, 네트워크 조건 고정
-
-현재 저장소에는 Android 앱, Gradle Wrapper 및 실제 resource-id가 없으므로 계측 테스트를 여기서 직접 실행할 수는 없다. 이는 과제에서 허용한 조건이며, 실제 앱에 연결할 때 패키지명·Selector·fixture만 환경에 맞게 조정한다.
+실행을 위해서는 로그인된 테스트 계정, 주문 가능한 테스트 매장·메뉴, 안정적인 resource-id와 독립된 테스트 데이터가 필요하다. 현재 저장소에는 Android 앱, Gradle Wrapper 및 실제 resource-id가 없으므로 계측 테스트 실행은 생략했다.
 
 ### CI Flaky 원인 추적 순서
 
