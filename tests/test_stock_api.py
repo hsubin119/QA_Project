@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
+from time import perf_counter, sleep
 
 from bmart_stock import InventoryStore
 from tests.helpers import StockApiClient, assert_api_error, assert_stock
@@ -160,19 +161,23 @@ def test_two_near_simultaneous_orders_for_last_unit_allow_only_one_success(
     store.seed_product(product_id, stock=1)
     barrier = Barrier(2)
 
-    def place_order() -> tuple[int, str | None]:
+    def place_order(delay_seconds: float) -> tuple[int, str | None, float]:
         barrier.wait(timeout=2)
+        sleep(delay_seconds)
+        started_at = perf_counter()
         response = api_client.create_order(product_id, quantity=1)
         error_code = (
             response.json().get("error", {}).get("code")
             if response.status_code != 201
             else None
         )
-        return response.status_code, error_code
+        return response.status_code, error_code, started_at
 
     with ThreadPoolExecutor(max_workers=2) as executor:
-        results = list(executor.map(lambda _: place_order(), range(2)))
+        results = list(executor.map(place_order, (0.0, 0.02)))
 
-    assert sorted(status for status, _ in results) == [201, 409]
-    assert [code for _, code in results if code] == ["OUT_OF_STOCK"]
+    request_interval = abs(results[0][2] - results[1][2])
+    assert 0.015 <= request_interval <= 0.1
+    assert sorted(status for status, _, _ in results) == [201, 409]
+    assert [code for _, code, _ in results if code] == ["OUT_OF_STOCK"]
     assert_stock(api_client, product_id, 0, sold_out=True)

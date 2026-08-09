@@ -9,6 +9,7 @@ import com.baemin.qa.pages.MenuPage
 import com.baemin.qa.pages.OrderStatusPage
 import com.baemin.qa.pages.PaymentPage
 import com.baemin.qa.pages.ShopListPage
+import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -18,6 +19,8 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class OrderFlowTest {
     private lateinit var device: UiDevice
+    private lateinit var testDataApi: TestDataApi
+    private var createdOrderId: String? = null
 
     @get:Rule
     val failureArtifacts = FailureArtifactsRule()
@@ -26,6 +29,8 @@ class OrderFlowTest {
     fun setUp() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         device = UiDevice.getInstance(instrumentation)
+        testDataApi = TestDataApi.fromInstrumentationArguments()
+        testDataApi.clearCart()
 
         // 로그인된 테스트 계정과 주문 가능한 테스트 매장은 CI fixture에서 준비한다.
         // 각 Page Object의 waitUntilLoaded가 잘못된 시작 화면을 즉시 식별한다.
@@ -48,6 +53,7 @@ class OrderFlowTest {
         val orderId = PaymentPage(device)
             .waitUntilLoaded()
             .pay()
+        createdOrderId = orderId
 
         OrderStatusPage(device)
             .waitUntilLoaded()
@@ -55,6 +61,23 @@ class OrderFlowTest {
             .assertStatus(WAITING_FOR_ACCEPTANCE)
             .assertPaymentCompleted()
             .assertNoBlockingError()
+    }
+
+    @After
+    fun tearDown() {
+        if (!::testDataApi.isInitialized) return
+
+        val cleanupErrors = mutableListOf<Throwable>()
+        createdOrderId?.let { orderId ->
+            runCatching { testDataApi.cancelOrder(orderId) }
+                .onFailure(cleanupErrors::add)
+        }
+        runCatching { testDataApi.clearCart() }
+            .onFailure(cleanupErrors::add)
+
+        if (cleanupErrors.isNotEmpty()) {
+            throw AssertionError("Failed to clean E2E test data", cleanupErrors.first())
+        }
     }
 
     private companion object {
