@@ -4,8 +4,8 @@ from collections.abc import Iterator
 
 import pytest
 
-from bmart_stock import InventoryStore, StubServer
-from tests.helpers import StockApiClient
+from Test2.bmart_stock import InventoryStore, StubServer
+from Test2.tests.helpers import StockApiClient
 
 
 @pytest.fixture

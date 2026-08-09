@@ -1,5 +1,12 @@
 # QA_Project
 
+## 제출 구조
+
+- `Test1`: 문제 1 테스트 자동화 전략 문서 안내
+- `Test2`: B마트 재고 API Stub과 자동화 테스트
+- `Test3`: Android E2E 리팩터링 코드
+- `Test4`: 운영 장애 기반 테스트 생성 프로토타입과 단위 테스트
+
 ## 문제 1. 실시간 주문 현황 테스트 자동화 전략
 
 ### 1. 전략 수립의 전제
@@ -325,13 +332,13 @@ python -m pytest -v
 동시성 테스트만 실행하려면 다음 명령을 사용한다.
 
 ```bash
-python -m pytest -v -k near_simultaneous
+python -m pytest -v Test2/tests/test_stock_api.py -k near_simultaneous
 ```
 
 #### Stub 서버 단독 실행
 
 ```bash
-python -m bmart_stock.server --port 8080 --product-id popular-product --stock 10
+python -m Test2.bmart_stock.server --port 8080 --product-id popular-product --stock 10
 ```
 
 실행 후 별도 터미널에서 다음과 같이 호출할 수 있다.
@@ -398,21 +405,22 @@ curl -X POST http://127.0.0.1:8080/v1/orders \
 
 ```text
 .
-├── bmart_stock/
-│   ├── __init__.py
-│   └── server.py
-├── tests/
-│   ├── conftest.py
-│   ├── helpers.py
-│   └── test_stock_api.py
+├── Test2/
+│   ├── bmart_stock/
+│   │   ├── __init__.py
+│   │   └── server.py
+│   └── tests/
+│       ├── conftest.py
+│       ├── helpers.py
+│       └── test_stock_api.py
 ├── pytest.ini
 └── requirements.txt
 ```
 
-- `bmart_stock/server.py`: 재고·주문 도메인 로직과 HTTP Stub 서버
-- `tests/conftest.py`: 테스트별 독립 Store, 임의 포트 서버의 시작·종료, API Client fixture
-- `tests/helpers.py`: HTTP 호출을 캡슐화한 Client와 재사용 가능한 재고·오류 검증 헬퍼
-- `tests/test_stock_api.py`: 정상·예외·복구·품절·동시성 시나리오
+- `Test2/bmart_stock/server.py`: 재고·주문 도메인 로직과 HTTP Stub 서버
+- `Test2/tests/conftest.py`: 테스트별 독립 Store, 임의 포트 서버의 시작·종료, API Client fixture
+- `Test2/tests/helpers.py`: HTTP 호출을 캡슐화한 Client와 재사용 가능한 재고·오류 검증 헬퍼
+- `Test2/tests/test_stock_api.py`: 정상·예외·복구·품절·동시성 시나리오
 - `pytest.ini`: 테스트 탐색 위치와 기본 출력 설정
 
 각 테스트는 새로운 `InventoryStore`와 서버를 사용한다. 테스트 데이터가 다른 테스트에 남지 않으며 실행 순서와 병렬 실행 여부에 의존하지 않는다. 서버는 운영체제가 할당한 임의 포트에서 시작해 CI의 포트 충돌 가능성을 줄이고, fixture 종료 시 반드시 정리한다. 모든 HTTP 요청에는 2초 제한 시간을 적용해 서버 이상 시 테스트가 무한 대기하지 않도록 했다.
@@ -474,7 +482,7 @@ OpenAI Codex를 다음 작업에 활용했다.
 코드는 다음 위치에 작성했다.
 
 ```text
-problem3/e2e/src/androidTest/java/com/baemin/qa/
+Test3/e2e/src/androidTest/java/com/baemin/qa/
 ├── OrderFlowTest.kt
 ├── FailureArtifactsRule.kt
 ├── TestDataApi.kt
@@ -692,14 +700,13 @@ AI가 제안한 Selector와 앱 패키지는 가상 명세이며, 실제 프로�
 ### 프로토타입 구조
 
 ```text
-problem4/
+Test4/
 ├── __init__.py
 ├── incident_to_test.py
-└── examples/
-    └── incident.json
-
-tests/
-└── test_incident_to_test.py
+├── examples/
+│   └── incident.json
+└── tests/
+    └── test_incident_to_test.py
 ```
 
 - `incident_to_test.py`: 장애 입력 검증과 회귀 테스트 초안 생성
@@ -713,13 +720,13 @@ tests/
 저장소 루트에서 샘플 장애를 변환한다.
 
 ```bash
-python -m problem4.incident_to_test problem4/examples/incident.json
+python -m Test4.incident_to_test Test4/examples/incident.json
 ```
 
 문제 4 테스트만 실행한다.
 
 ```bash
-python -m pytest -v tests/test_incident_to_test.py
+python -m pytest -v Test4/tests/test_incident_to_test.py
 ```
 
 전체 회귀 테스트를 실행한다.

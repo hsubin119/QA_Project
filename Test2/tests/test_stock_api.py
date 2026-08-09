@@ -4,8 +4,8 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 from time import perf_counter, sleep
 
-from bmart_stock import InventoryStore
-from tests.helpers import StockApiClient, assert_api_error, assert_stock
+from Test2.bmart_stock import InventoryStore
+from Test2.tests.helpers import StockApiClient, assert_api_error, assert_stock
 
 
 def test_get_stock_returns_current_quantity(

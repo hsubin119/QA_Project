@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from problem4 import generate_tests
+from Test4 import generate_tests
 
 
 def incident(**overrides: object) -> dict:
