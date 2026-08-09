@@ -1,0 +1,17 @@
+{
+  "incidentId": "INC-2026-0142",
+  "title": "동시 주문 시 재고 음수 발생",
+  "customerImpact": "일부 고객의 주문이 결제 후 취소됨",
+  "expectedBehavior": "재고 1개일 때 주문 1건만 성공해야 한다",
+  "actualBehavior": "두 주문이 모두 성공하고 재고가 -1이 되었다",
+  "rootCause": {
+    "category": "RACE_CONDITION",
+    "confirmed": true,
+    "description": "재고 확인과 차감 사이에 원자성이 보장되지 않았다"
+  },
+  "relatedApis": [
+    "POST /v1/orders",
+    "GET /v1/products/{productId}/stock"
+  ],
+  "fixSummary": "조건부 재고 차감과 트랜잭션 적용"
+}
